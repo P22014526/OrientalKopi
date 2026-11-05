@@ -2,8 +2,10 @@
 require_once 'includes/db.php';
 require_once 'includes/auth.php';
 require_once 'includes/functions.php';
+require_once 'includes/malaysian_phone.php';
 
 require_login();
+if (empty($_SESSION['profile_csrf'])) $_SESSION['profile_csrf'] = bin2hex(random_bytes(32));
 
 $success = '';
 $error = '';
@@ -14,13 +16,17 @@ $user = $stmt->fetch();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $fullName = trim($_POST['full_name'] ?? '');
-  $phone = trim($_POST['phone'] ?? '');
+  $phone = submitted_malaysian_phone($_POST);
 
-  if ($fullName === '') {
+  if (!is_string($_POST['csrf'] ?? null) || !hash_equals($_SESSION['profile_csrf'], $_POST['csrf'])) {
+    $error = 'Your session expired. Please refresh and try again.';
+  } elseif ($fullName === '') {
     $error = 'Full name is required.';
+  } elseif (normalize_malaysian_mobile($phone) === null) {
+    $error = MY_PHONE_ERROR;
   } else {
     $stmt = $pdo->prepare("UPDATE users SET full_name=?, phone=? WHERE user_id=?");
-    $stmt->execute([$fullName, $phone, $_SESSION['user_id']]);
+    $stmt->execute([$fullName, normalize_malaysian_mobile($phone), $_SESSION['user_id']]);
 
     $_SESSION['full_name'] = $fullName;
 
@@ -51,14 +57,14 @@ include 'includes/header.php';
       <?php endif; ?>
 
       <form method="post">
+        <input type="hidden" name="csrf" value="<?= h($_SESSION['profile_csrf']) ?>">
         <label class="form-label">Full Name</label>
         <input name="full_name" class="form-control mb-3" value="<?= h($user['full_name']) ?>" required>
 
         <label class="form-label">Email</label>
         <input class="form-control mb-3" value="<?= h($user['email']) ?>" disabled>
 
-        <label class="form-label">Phone</label>
-        <input name="phone" class="form-control mb-3" value="<?= h($user['phone']) ?>">
+        <?php render_malaysian_phone_field('profile-phone', $error ? $phone : ($user['phone'] ?? '')); ?>
 
         <button class="btn btn-dark">Save Changes</button>
         <a href="view_profile.php" class="btn btn-outline-dark">View Profile</a>
@@ -67,4 +73,5 @@ include 'includes/header.php';
   </div>
 </div>
 
+<script src="assets/malaysian_phone.js?v=2"></script>
 <?php include 'includes/footer.php'; ?>

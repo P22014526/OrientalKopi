@@ -1,6 +1,8 @@
 <?php
 require_once 'includes/db.php';
 require_once 'includes/auth.php';
+require_once 'includes/email_verification.php';
+ensure_email_verification_table($pdo);
 
 $error = '';
 
@@ -13,11 +15,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $user = $stmt->fetch();
 
   if ($user && password_verify($password, $user['password_hash'])) {
+    session_regenerate_id(true);
+    if (registration_verification_pending($pdo, (int)$user['user_id'])) {
+      unset($_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role']);
+      $_SESSION['pending_verification_user_id'] = (int)$user['user_id'];
+      header('Location: verify_email.php');
+      exit;
+    }
+    unset($_SESSION['pending_verification_user_id']);
     $_SESSION['user_id'] = $user['user_id'];
     $_SESSION['full_name'] = $user['full_name'];
     $_SESSION['role'] = $user['role'];
+    unset($_SESSION['selected_state_id'], $_SESSION['selected_outlet_id'], $_SESSION['selected_outlet_name']);
 
-    header($user['role'] === 'admin' ? 'Location: admin/dashboard.php' : 'Location: index.php');
+    if ($user['role'] === 'admin' || $user['role'] === 'shop_owner') {
+      header('Location: admin/dashboard.php');
+    } else {
+      header('Location: select_outlet.php');
+    }
     exit;
   }
 
@@ -45,6 +60,10 @@ include 'includes/header.php';
 
       <?php if ($error): ?>
         <div class="alert alert-danger"><?= h($error) ?></div>
+      <?php endif; ?>
+      <?php if (!empty($_SESSION['email_verified_notice'])): ?>
+        <div class="alert alert-success">Email verified. You can now log in.</div>
+        <?php unset($_SESSION['email_verified_notice']); ?>
       <?php endif; ?>
 
       <form method="post">

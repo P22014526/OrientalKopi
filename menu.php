@@ -42,7 +42,7 @@ include 'includes/header.php';
 ?>
 
 
-<div class="card ok-card p-4">
+<div class="card ok-card p-4 food-catalog">
     <div class="section-title">Customer Area</div>
     <h3>Oriental Kopi Menu</h3>
     <p class="muted-small">

@@ -56,10 +56,19 @@ if (!$rescheduleAllowed) {
         && $newTime === substr($booking['booking_time'], 0, 5)
     ) {
         $error = 'Please select a different date or time from your current booking.';
-    } elseif (!is_slot_available($pdo, $newDate, $newTime, (int)$booking['pax'])) {
-        $usage = slot_usage($pdo, $newDate, $newTime);
-        $remaining = max(0, (int)$usage['capacity'] - (int)$usage['used']);
-        $error = "The selected slot is unavailable. Only {$remaining} pax remaining.";
+    } elseif ($policyError = customer_booking_policy_violation(
+        $pdo,
+        (int)$_SESSION['user_id'],
+        $newDate,
+        $newTime,
+        (int)$booking['booking_id']
+    )) {
+        $error = $policyError;
+    } elseif (!is_slot_available($pdo, $newDate, $newTime, (int)$booking['pax'], null, $booking['table_type'] ?? null, $booking['outlet_id'] ?? null)) {
+        $usage = slot_usage($pdo, $newDate, $newTime, (int)$booking['pax'], null, $booking['table_type'] ?? null, $booking['outlet_id'] ?? null);
+        $remainingTables = (int)$usage['remaining_tables'];
+        $remainingSeats = (int)$usage['remaining_seats'];
+        $error = "The selected slot is unavailable. No suitable table set is available. Remaining: {$remainingTables} table(s), {$remainingSeats} seat(s).";
     }
 }
 
@@ -70,11 +79,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
         INSERT INTO bookings (
             booking_code,
             user_id,
+            outlet_id,
             customer_name,
             phone,
             booking_date,
             booking_time,
             pax,
+            table_type,
             status,
             request_type,
             old_booking_date,
@@ -82,6 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
             reward_text
         )
         VALUES (
+            ?,
+            ?,
             ?,
             ?,
             ?,
@@ -100,11 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
     $stmt->execute([
         null,
         $_SESSION['user_id'],
+        $booking['outlet_id'],
         $booking['customer_name'],
         $booking['phone'],
         $newDate,
         $newTime,
         $booking['pax'],
+        $booking['table_type'],
         $booking['booking_date'],
         $booking['booking_time'],
         $reward

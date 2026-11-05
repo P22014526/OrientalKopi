@@ -2,6 +2,10 @@
 require_once 'includes/db.php';
 require_once 'includes/auth.php';
 require_once 'includes/functions.php';
+require_once 'includes/malaysian_phone.php';
+require_once 'includes/email_verification.php';
+require_once 'includes/mailer.php';
+ensure_email_verification_table($pdo);
 
 $error = '';
 
@@ -12,7 +16,7 @@ $phone = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $name = trim($_POST['full_name'] ?? '');
   $email = trim($_POST['email'] ?? '');
-  $phone = trim($_POST['phone'] ?? '');
+  $phone = submitted_malaysian_phone($_POST);
   $password = $_POST['password'] ?? '';
   $confirm = $_POST['confirm_password'] ?? '';
 
@@ -21,7 +25,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $hasSpecialCharacter =
     preg_match('/[^A-Za-z0-9\s]/', $password) === 1;
 
-  if (!$hasMinimumLength) {
+  if (!registration_csrf_valid($_POST['csrf'] ?? null)) {
+    $error = 'Your session expired. Please try again.';
+  } elseif ($name === '' || strlen($name) > 100 || $phone === '' || strlen($phone) > 30) {
+    $error = 'Please enter your name (up to 100 characters) and phone number (up to 30 characters).';
+  } elseif (normalize_malaysian_mobile($phone) === null) {
+    $error = MY_PHONE_ERROR;
+  } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 120) {
+    $error = 'Please enter a valid email address.';
+  } elseif (!$hasMinimumLength) {
     $error = 'Password must contain at least 8 characters.';
   } elseif (!$hasUppercase) {
     $error = 'Password must contain at least one uppercase letter.';
@@ -44,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if ($error === '') {
     try {
+      $pdo->beginTransaction();
       $stmt = $pdo->prepare("
                 INSERT INTO users (
                     full_name,
@@ -58,14 +71,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $stmt->execute([
         $name,
         $email,
-        $phone,
+        normalize_malaysian_mobile($phone),
         password_hash($password, PASSWORD_DEFAULT)
       ]);
 
-      header('Location: login.php');
-      exit;
+      $newUserId = (int)$pdo->lastInsertId();
+      $pdo->prepare('INSERT INTO registration_verifications (user_id) VALUES (?)')->execute([$newUserId]);
+      $pdo->commit();
     } catch (PDOException $e) {
-      $error = 'Email already exists.';
+      if ($pdo->inTransaction()) $pdo->rollBack();
+      error_log('Registration failed: ' . $e->getMessage());
+      $error = 'Unable to create the account. If this email is already registered, please log in.';
+    }
+    if ($error === '') {
+      session_regenerate_id(true);
+      unset($_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $_SESSION['selected_outlet_id']);
+      $_SESSION['pending_verification_user_id'] = $newUserId;
+      $_SESSION['verification_send_error'] = send_registration_code($pdo, $newUserId);
+      $_SESSION['verification_sent'] = $_SESSION['verification_send_error'] === '';
+      header('Location: verify_email.php');
+      exit;
     }
   }
 }
@@ -85,6 +110,7 @@ include 'includes/header.php';
       <?php endif; ?>
 
       <form method="post" id="registerForm">
+        <input type="hidden" name="csrf" value="<?= h(registration_csrf_token()) ?>">
         <input
           name="full_name"
           class="form-control mb-3"
@@ -109,13 +135,7 @@ include 'includes/header.php';
           aria-live="polite">
         </div>
 
-        <input
-          name="phone"
-          class="form-control mb-3"
-          placeholder="Phone"
-          value="<?= h($phone) ?>"
-          autocomplete="tel"
-          required>
+        <?php render_malaysian_phone_field('register-phone', $phone); ?>
 
         <label for="password" class="form-label">
           Password
@@ -205,6 +225,7 @@ include 'includes/header.php';
   </div>
 </div>
 
+<script src="assets/malaysian_phone.js?v=2"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const passwordInput =

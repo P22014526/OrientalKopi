@@ -219,11 +219,14 @@ include 'includes/header.php';
     <span>My Bookings</span>
 </a>
 
-<div class="row g-4">
+<div id="preorder-menu" class="row g-4 food-catalog">
     <div class="col-lg-7">
         <div class="card ok-card p-4">
             <div class="section-title">Menu Preorder</div>
             <h3>Choose Food for Booking <?= h($booking['booking_code']) ?></h3>
+            <a class="btn btn-outline-dark d-lg-none mb-3" href="#preorder-cart">
+                View Food List (<?= h(count($cart)) ?>)
+            </a>
 
             <p class="muted-small">
                 Booking Date:
@@ -304,7 +307,7 @@ include 'includes/header.php';
 
                             <form method="post" class="d-flex gap-2">
                                 <input type="hidden" name="item_id" value="<?= h($item['item_id']) ?>">
-                                <input type="number" name="quantity" class="form-control form-control-sm" min="1" value="1" style="max-width:90px;">
+                                <input type="number" name="quantity" class="form-control form-control-sm" min="1" value="1" style="max-width:90px;" aria-label="Quantity for <?= h($item['item_name']) ?>">
                                 <button class="btn btn-sm btn-dark">Add</button>
                             </form>
                         </div>
@@ -318,10 +321,11 @@ include 'includes/header.php';
         </div>
     </div>
 
-    <div class="col-lg-5">
+    <div id="preorder-cart" class="col-lg-5">
         <div class="card ok-card p-4">
             <div class="section-title">Preorder Cart</div>
             <h4>Your Food List</h4>
+            <a class="btn btn-outline-dark d-lg-none mb-3" href="#preorder-menu">Back to Menu</a>
 
             <?php if (!$cart): ?>
                 <div class="alert alert-info">No food selected yet.</div>

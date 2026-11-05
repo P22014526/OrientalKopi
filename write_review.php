@@ -10,10 +10,12 @@ $error = '';
 $success = '';
 
 $stmt = $pdo->prepare("
-    SELECT *
-    FROM bookings
-    WHERE booking_id = ?
-      AND user_id = ?
+    SELECT b.*, o.branch_name, o.location_detail, s.state_name
+    FROM bookings b
+    LEFT JOIN outlets o ON o.outlet_id = b.outlet_id
+    LEFT JOIN outlet_states s ON s.state_id = o.state_id
+    WHERE b.booking_id = ?
+      AND b.user_id = ?
     LIMIT 1
 ");
 $stmt->execute([$bookingId, $_SESSION['user_id']]);
@@ -116,6 +118,14 @@ include 'includes/header.php';
                     <div class="col-md-6">
                         <strong>Pax:</strong>
                         <?= h($booking['pax']) ?>
+                    </div>
+
+                    <div class="col-md-12">
+                        <strong>Outlet:</strong>
+                        <?= h(($booking['branch_name'] ?? 'Unassigned Outlet') . ' - ' . ($booking['state_name'] ?? '-')) ?>
+                        <div class="muted-small">
+                            <?= h($booking['location_detail'] ?? '') ?>
+                        </div>
                     </div>
                 </div>
             </div>

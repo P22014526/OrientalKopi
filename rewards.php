@@ -33,8 +33,7 @@ $stmt = $pdo->prepare("
 $stmt->execute([$userId]);
 $vouchers = $stmt->fetchAll();
 
-$nextTarget = $badgeCount < 5 ? 5 : 10;
-$progress = min(100, ($badgeCount / $nextTarget) * 100);
+$rewardProgress = reward_progress($badgeCount);
 
 include 'includes/header.php';
 ?>
@@ -62,24 +61,30 @@ include 'includes/header.php';
         <div class="col-md-4">
             <div class="stat-pill">
                 <strong>Next Reward Target</strong><br>
-                <?= h($nextTarget) ?> badges
+                <?= h($rewardProgress['next_voucher']) ?><br>
+                <span class="muted-small"><?= h($rewardProgress['remaining']) ?> more badge(s)</span>
             </div>
         </div>
 
         <div class="col-md-4">
             <div class="stat-pill">
                 <strong>Reward Rule</strong><br>
-                5 badges = RM10 voucher
+                5 badges = RM10, another 10 = RM25.<br>
+                <span class="muted-small">The cycle then repeats.</span>
             </div>
         </div>
     </div>
 
     <div class="mt-4">
-        <strong>Progress to next voucher</strong>
-        <div class="progress mt-2" style="height: 22px;">
-            <div class="progress-bar bg-warning text-dark fw-bold" style="width: <?= h($progress) ?>%;">
-                <?= h($badgeCount) ?> / <?= h($nextTarget) ?>
-            </div>
+        <div class="d-flex justify-content-between flex-wrap gap-2">
+            <strong>Progress to next voucher</strong>
+            <span><?= h($rewardProgress['current']) ?> / <?= h($rewardProgress['target']) ?> badges</span>
+        </div>
+        <div class="progress mt-2" style="height: 22px;"
+             role="progressbar" aria-label="Progress to <?= h($rewardProgress['next_voucher']) ?>"
+             aria-valuemin="0" aria-valuemax="<?= h($rewardProgress['target']) ?>"
+             aria-valuenow="<?= h($rewardProgress['current']) ?>">
+            <div class="progress-bar bg-warning" style="width: <?= h($rewardProgress['percent']) ?>%;"></div>
         </div>
     </div>
 </div>
@@ -118,26 +123,73 @@ include 'includes/header.php';
             <?php endif; ?>
 
             <?php foreach ($vouchers as $voucher): ?>
-                <div class="voucher-card mb-3">
-                    <div>
+                <?php $voucherIsUsed = !empty($voucher['is_used']); ?>
+                <div class="voucher-card mb-3 <?= $voucherIsUsed ? 'is-used' : '' ?>">
+                    <div class="voucher-card-copy">
                         <strong><?= h($voucher['voucher_name']) ?></strong>
                         <p class="mb-1 muted-small">
                             Code: <strong><?= h($voucher['voucher_code']) ?></strong>
                         </p>
                         <p class="mb-0 muted-small">
-                            Required badges: <?= h($voucher['badge_required']) ?>
+                            Earned at <?= h($voucher['badge_required']) ?> total badges
                         </p>
+
+                        <?php if (!$voucherIsUsed): ?>
+                            <p class="voucher-scan-note mb-0">
+                                Show this QR code to staff when redeeming your voucher.
+                            </p>
+                        <?php endif; ?>
                     </div>
 
-                    <?php if ($voucher['is_used']): ?>
-                        <span class="badge bg-secondary">Used</span>
-                    <?php else: ?>
-                        <span class="badge bg-success">Available</span>
-                    <?php endif; ?>
+                    <div class="voucher-card-visual">
+                        <?php if ($voucherIsUsed): ?>
+                            <div class="voucher-used-mark" aria-hidden="true">✓</div>
+                            <span class="badge bg-secondary">Used</span>
+                        <?php else: ?>
+                            <div
+                                class="voucher-qr"
+                                data-voucher-code="<?= h($voucher['voucher_code']) ?>"
+                                aria-label="QR code for voucher <?= h($voucher['voucher_code']) ?>"></div>
+                            <span class="badge bg-success">Available</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
             <?php endforeach; ?>
         </div>
     </div>
 </div>
+
+<?php if ($vouchers): ?>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+        integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.voucher-qr').forEach(function(container) {
+                const voucherCode = container.dataset.voucherCode;
+
+                if (!voucherCode || typeof QRCode === 'undefined') {
+                    container.textContent = 'Use voucher code';
+                    container.classList.add('voucher-qr-fallback');
+                    return;
+                }
+
+                const redeemUrl = new URL('admin/redeem_voucher.php', window.location.href);
+                redeemUrl.searchParams.set('code', voucherCode);
+
+                new QRCode(container, {
+                    text: redeemUrl.href,
+                    width: 132,
+                    height: 132,
+                    colorDark: '#0e2133',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            });
+        });
+    </script>
+<?php endif; ?>
 
 <?php include 'includes/footer.php'; ?>

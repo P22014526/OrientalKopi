@@ -35,21 +35,7 @@ if (!preg_match('/^\d{2}:\d{2}$/', $filterTime)) {
 
 function reschedule_slot_period($slot)
 {
-    $hour = (int)date('H', strtotime($slot));
-
-    if ($hour >= 9 && $hour < 12) {
-        return 'breakfast';
-    }
-
-    if ($hour >= 12 && $hour < 15) {
-        return 'lunch';
-    }
-
-    if ($hour >= 17 && $hour <= 22) {
-        return 'dinner';
-    }
-
-    return 'other';
+    return booking_meal_period($slot);
 }
 
 $stmt = $pdo->prepare("
@@ -277,7 +263,7 @@ include 'includes/header.php';
                     <div class="row g-2">
                         <?php foreach ($groupSlots as $slot): ?>
                             <?php
-                            $u = slot_usage($pdo, $newDate, $slot);
+                            $u = slot_usage($pdo, $newDate, $slot, (int)$b['pax'], $id, $b['table_type'] ?? null, $b['outlet_id'] ?? null);
                             $slotTimestamp = strtotime($newDate . ' ' . $slot);
                             $isPastSlot = $slotTimestamp !== false && $slotTimestamp <= time();
                             $isCurrentBooking =
@@ -304,7 +290,7 @@ include 'includes/header.php';
                                             Full<br>
                                         <?php endif; ?>
                                         <span class="muted-small">
-                                            <?= h($u['used']) ?>/<?= h($u['capacity']) ?> pax
+                                            <?= h($u['used_tables']) ?>/<?= h($u['total_tables']) ?> tables
                                         </span>
                                     </button>
                                 <?php else: ?>
@@ -323,7 +309,7 @@ include 'includes/header.php';
                                             <strong><?= h(format_time12($slot)) ?></strong><br>
                                             <?= $u['status'] === 'Available' ? 'Available' : 'Limited' ?><br>
                                             <span class="muted-small">
-                                                <?= h($u['used']) ?>/<?= h($u['capacity']) ?> pax
+                                                <?= h($u['used_tables']) ?>/<?= h($u['total_tables']) ?> tables
                                             </span>
                                             <span class="btn btn-sm btn-outline-<?= h($u['color']) ?> mt-3 w-100">
                                                 Request This Slot
